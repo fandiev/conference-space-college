@@ -1,0 +1,44 @@
+<%- include('header', { title: 'Заявка №' + booking.id }) %>
+<h1 class="h2 mb-3">Заявка №<%= booking.id %></h1>
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h5"><%= booking.room_name %></h2>
+  <div class="row">
+    <p class="col-md-6 col-12"><b>Тип:</b> <%= booking.room_type %></p>
+    <p class="col-md-6 col-12"><b>Вместимость:</b> <%= booking.room_capacity %> чел.</p>
+    <p class="col-md-6 col-12"><b>Дата:</b> <%= booking.date_start %></p>
+    <p class="col-md-6 col-12"><b>Статус:</b> <%= booking.status %></p>
+    <p class="col-md-6 col-12"><b>Оплата:</b> <%= booking.payment %></p>
+    <p class="col-md-6 col-12"><b>Отметка об оплате:</b> <%= booking.payment_status || 'Не оплачено' %></p>
+    <p class="col-md-6 col-12"><b>Создана:</b> <%= booking.created_at %></p>
+  </div>
+  <% if (user.role === 'admin') { %>
+    <hr><h3 class="h5">Клиент</h3>
+    <p><b>ФИО:</b> <%= booking.user_fio %></p>
+    <p><b>Логин:</b> <%= booking.user_login %></p>
+    <p><b>Телефон:</b> <%= booking.user_phone %></p>
+    <p><b>Email:</b> <%= booking.user_email %></p>
+    <form method="POST" action="/admin/payment" class="row align-items-end g-2 mt-2">
+      <input type="hidden" name="id" value="<%= booking.id %>">
+      <div class="col-md-7 col-12"><label class="form-label" for="payment-status">Отметка об оплате (вручную)</label>
+        <select class="form-select" id="payment-status" name="status">
+          <% paymentStatuses.forEach(status => { %><option value="<%= status %>" <%= status === booking.payment_status ? 'selected' : '' %>><%= status %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-5 col-12"><button class="btn btn-primary w-100" type="submit">Сохранить оплату</button></div>
+    </form>
+  <% } %>
+</div></div>
+<% if (booking.review) { %>
+  <div class="card mb-3"><div class="card-body"><h2 class="h5">Отзыв</h2><p class="mb-0 review"><%= booking.review %></p></div></div>
+<% } else if (isOwner && booking.status === 'Завершено') { %>
+  <div class="card mb-3"><div class="card-body">
+    <h2 class="h5">Оставить отзыв</h2>
+    <form method="POST" action="/review/<%= booking.id %>">
+      <label class="form-label" for="review">Ваш отзыв о мероприятии</label>
+      <textarea class="form-control mb-3" id="review" name="review" rows="3" minlength="3" maxlength="1000" required></textarea>
+      <button class="btn btn-primary" type="submit">Отправить</button>
+    </form>
+  </div></div>
+<% } %>
+<a href="<%= user.role === 'admin' ? '/admin' : '/dashboard' %>">← Вернуться к заявкам</a>
+<%- include('footer') %>

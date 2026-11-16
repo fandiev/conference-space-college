@@ -1,124 +1,127 @@
-'use strict';
-const { test, before, after } = require('node:test');
-const assert = require('node:assert/strict');
-const http = require('node:http');
-const { openDatabase } = require('../src/db');
-const { createApp,validDate,overlapping } = require('../src/server');
+import test, { before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-let server, url, db;
-const csrfOf = html => html.match(/name="csrf" value="([^"]+)"/)?.[1];
-function cookieOf(response) { return response.headers.get('set-cookie')?.split(';')[0] || ''; }
-async function request(route, {cookie='',form=null}={}) {
-  const res=await fetch(url+route,{method:form?'POST':'GET',headers:cookie?{cookie}:undefined,body:form?new URLSearchParams(form):undefined,redirect:'manual'});
-  return {res,body:await res.text(),cookie:cookieOf(res)};
+let server, base, db, folder, userCookie, adminCookie, firstId, secondId;
+const day = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+before(async () => {
+  folder = mkdtempSync(join(tmpdir(), 'conference-test-'));
+  process.env.DB_FILE = join(folder, 'test.db');
+  process.env.SESSION_SECRET = 'local-test-secret';
+  const { default: app } = await import('../server.js');
+  ({ default: db } = await import('../db.js'));
+  server = await new Promise(resolve => {
+    const running = app.listen(0, '127.0.0.1', () => resolve(running));
+  });
+  base = `http://127.0.0.1:${server.address().port}`;
+});
+
+after(async () => {
+  if (server) await new Promise(resolve => server.close(resolve));
+  if (db) db.close();
+  if (folder) rmSync(folder, { recursive: true, force: true });
+});
+
+async function send(path, { method = 'GET', cookie, body } = {}) {
+  const headers = {};
+  if (cookie) headers.cookie = cookie;
+  if (body) headers['content-type'] = 'application/x-www-form-urlencoded';
+  const response = await fetch(base + path, {
+    method, headers, redirect: 'manual',
+    body: body ? new URLSearchParams(body).toString() : undefined
+  });
+  return { status: response.status, location: response.headers.get('location'),
+    cookie: response.headers.get('set-cookie')?.split(';')[0], html: await response.text() };
 }
-async function login(username,password){
-  const page=await request('/login');
-  const answer=await request('/login',{cookie:page.cookie,form:{username,password,csrf:csrfOf(page.body)}});
-  assert.equal(answer.res.status,303,`Login failed: ${answer.body}`);
-  return answer.cookie;
-}
 
-before(async()=>{
-  db=openDatabase(':memory:');
-  server=http.createServer(createApp({db,secureCookies:false}));
-  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-  url=`http://127.0.0.1:${server.address().port}`;
-});
-after(async()=>{await new Promise(resolve=>server.close(resolve)); db.close()});
-
-test('Главная и каталог доступны гостю, стили и скрипт загружаются',async()=>{
-  const first=await request('/');assert.equal(first.res.status,200);assert.match(first.body,/Место для/);
-  const catalogue=await request('/rooms');assert.equal(catalogue.res.status,200);assert.match(catalogue.body,/Орбита/);
-  const room=await request('/rooms/orbit');assert.equal(room.res.status,200);assert.match(room.body,/1[\s\u00a0]600 ₽/);
-  assert.equal((await request('/styles.css')).res.status,200);
-  assert.equal((await request('/app.js')).res.status,200);
-  assert.equal((await request('/rooms/missing')).res.status,404);
+test('каталог доступен гостю, Bootstrap отдаётся локально', async () => {
+  const rooms = await send('/rooms');
+  assert.equal(rooms.status, 200);
+  assert.match(rooms.html, /Горизонт/);
+  assert.match(rooms.html, /bootstrap.min.css/);
+  assert.equal((await send('/css/bootstrap.min.css')).status, 200);
 });
 
-test('Регистрация, личный кабинет и выход',async()=>{
-  const page=await request('/register');
-  const signup=await request('/register',{cookie:page.cookie,form:{csrf:csrfOf(page.body),full_name:'Тестовый Пользователь',username:'testuser',email:'testuser@example.test',phone:'',password:'GoodPass2026!'}});
-  assert.equal(signup.res.status,303);
-  const cabinet=await request('/dashboard',{cookie:signup.cookie});
-  assert.equal(cabinet.res.status,200);assert.match(cabinet.body,/Привет, Тестовый/);
-  const csrf=csrfOf(cabinet.body);
-  assert.equal((await request('/logout',{cookie:signup.cookie,form:{csrf}})).res.status,303);
-  assert.equal((await request('/dashboard',{cookie:signup.cookie})).res.status,303);
+test('страницы с заявками не доступны без входа', async () => {
+  const page = await send('/dashboard');
+  assert.equal(page.status, 302);
+  assert.equal(page.location, '/login');
 });
 
-test('Защита от CSRF и неавторизованного доступа',async()=>{
-  const visitor=await request('/book/1');assert.equal(visitor.res.status,303);
-  const page=await request('/login');
-  const invalid=await request('/login',{cookie:page.cookie,form:{username:'student',password:'Student123!',csrf:'wrong'}});
-  assert.equal(invalid.res.status,403);
-  const bad=await request('/login',{cookie:page.cookie,form:{username:'student',password:'nope',csrf:csrfOf(page.body)}});
-  assert.equal(bad.res.status,401);
-  const userCookie=await login('student','Student123!');
-  assert.equal((await request('/admin',{cookie:userCookie})).res.status,403);
+test('регистрация проверяет поля и не допускает одинаковый логин', async () => {
+  const wrong = await send('/register', { method: 'POST', body: {
+    login: 'aa', password: '123', fio: 'Test', phone: '123', email: 'bad'
+  }});
+  assert.equal(wrong.status, 422);
+  assert.match(wrong.html, /Логин:/);
+  const form = { login: 'petrivan', password: 'Password123!', fio: 'Петров Иван',
+    phone: '8(999)222-44-55', email: 'petr@example.com' };
+  assert.equal((await send('/register', { method: 'POST', body: form })).status, 302);
+  assert.equal((await send('/register', { method: 'POST', body: form })).status, 422);
 });
 
-test('Пользователь создаёт заявку; сумма рассчитывается сервером',async()=>{
-  const userCookie=await login('student','Student123!');
-  const page=await request('/book/2',{cookie:userCookie});
-  const date=new Date();date.setDate(date.getDate()+4);
-  const tomorrow=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-  globalThis.bookingDate=tomorrow;
-  const form={csrf:csrfOf(page.body),date:tomorrow,start_time:'10:00',end_time:'12:00',attendees:'5',payment_method:'На месте',comment:'Важная встреча'};
-  const booked=await request('/book/2',{cookie:userCookie,form});
-  assert.equal(booked.res.status,303); assert.match(booked.res.headers.get('location'),/^\/booking\/\d+\?notice=booked$/);
-  const detail=await request(booked.res.headers.get('location'),{cookie:userCookie});
-  assert.match(detail.body,/3[\s\u00a0]200 ₽/); assert.match(detail.body,/Важная встреча/);
-  globalThis.newBookingId=Number(booked.res.headers.get('location').match(/booking\/(\d+)/)[1]);
-  const another=await request('/book/2',{cookie:userCookie});
-  const bad=await request('/book/2',{cookie:userCookie,form:{...form,csrf:csrfOf(another.body),attendees:'500'}});
-  assert.equal(bad.res.status,400);
-  const past=await request('/book/2',{cookie:userCookie,form:{...form,csrf:csrfOf(another.body),date:'2020-01-01'}});
-  assert.equal(past.res.status,400);
+test('вход пользователя и проверка пароля', async () => {
+  assert.equal((await send('/login', { method: 'POST', body: { login: 'petrivan', password: 'wrong' } })).status, 401);
+  const response = await send('/login', { method: 'POST', body: { login: 'petrivan', password: 'Password123!' } });
+  assert.equal(response.status, 302);
+  assert.equal(response.location, '/dashboard');
+  userCookie = response.cookie;
+  assert.ok(userCookie);
 });
 
-test('Администратор подтверждает бронь и блокирует пересекающуюся',async()=>{
-  const adminCookie=await login('admin','Admin2026!');
-  const page=await request(`/admin/booking/${globalThis.newBookingId}`,{cookie:adminCookie});
-  assert.equal(page.res.status,200);
-  const approve=await request(`/admin/booking/${globalThis.newBookingId}`,{cookie:adminCookie,form:{csrf:csrfOf(page.body),status:'approved',admin_note:'Принято!'}});
-  assert.equal(approve.res.status,303);
-  const blockedUser=await login('testuser','GoodPass2026!');
-  const bookingPage=await request('/book/2',{cookie:blockedUser});
-  const overlapping=await request('/book/2',{cookie:blockedUser,form:{csrf:csrfOf(bookingPage.body),date:globalThis.bookingDate,start_time:'11:00',end_time:'13:00',attendees:'5',payment_method:'На месте',comment:''}});
-  assert.equal(overlapping.res.status,400);assert.match(overlapping.body,/уже забронирован/);
-  const otherDate=new Date(`${globalThis.bookingDate}T12:00:00`);otherDate.setDate(otherDate.getDate()+1);
-  const next=`${otherDate.getFullYear()}-${String(otherDate.getMonth()+1).padStart(2,'0')}-${String(otherDate.getDate()).padStart(2,'0')}`;
-  const okay=await request('/book/2',{cookie:blockedUser,form:{csrf:csrfOf(bookingPage.body),date:next,start_time:'11:00',end_time:'13:00',attendees:'5',payment_method:'На месте'}});
-  assert.equal(okay.res.status,303);
-  const secondId=Number(okay.res.headers.get('location').match(/booking\/(\d+)/)[1]);
-  // The same interval can be requested before an approval, but not approved twice.
-  const again=await request('/book/2',{cookie:blockedUser,form:{csrf:csrfOf(bookingPage.body),date:next,start_time:'12:00',end_time:'14:00',attendees:'5',payment_method:'На месте'}});
-  assert.equal(again.res.status,303);
-  const thirdId=Number(again.res.headers.get('location').match(/booking\/(\d+)/)[1]);
-  const secondPage=await request(`/admin/booking/${secondId}`,{cookie:adminCookie});
-  assert.equal((await request(`/admin/booking/${secondId}`,{cookie:adminCookie,form:{csrf:csrfOf(secondPage.body),status:'approved'}})).res.status,303);
-  const thirdPage=await request(`/admin/booking/${thirdId}`,{cookie:adminCookie});
-  const rejected=await request(`/admin/booking/${thirdId}`,{cookie:adminCookie,form:{csrf:csrfOf(thirdPage.body),status:'approved'}});
-  assert.equal(rejected.res.status,409);assert.match(rejected.body,/уже есть подтверждённое/);
+test('заявка и оплата сохраняются вместе', async () => {
+  const form = { room_id: '1', date_start: day, payment: 'При очном посещении' };
+  assert.equal((await send('/create', { method: 'POST', cookie: userCookie, body: form })).status, 302);
+  assert.equal((await send('/create', { method: 'POST', cookie: userCookie, body: form })).status, 302);
+  const rows = db.prepare('SELECT id FROM requests WHERE room_id = 1 AND date_start = ? ORDER BY id').all(day);
+  assert.equal(rows.length, 2);
+  [firstId, secondId] = rows.map(row => row.id);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payments WHERE request_id IN (?, ?)').get(firstId, secondId).count, 2);
+  assert.match((await send('/dashboard', { cookie: userCookie })).html, /Горизонт/);
 });
 
-test('Отзыв разрешён только после завершения, вторая отправка не создаёт дубль',async()=>{
-  const adminCookie=await login('admin','Admin2026!');
-  const adminPage=await request(`/admin/booking/${globalThis.newBookingId}`,{cookie:adminCookie});
-  assert.equal((await request(`/admin/booking/${globalThis.newBookingId}`,{cookie:adminCookie,form:{csrf:csrfOf(adminPage.body),status:'completed'}})).res.status,303);
-  const student=await login('student','Student123!');
-  const detail=await request(`/booking/${globalThis.newBookingId}`,{cookie:student});
-  const review=await request(`/reviews/${globalThis.newBookingId}`,{cookie:student,form:{csrf:csrfOf(detail.body),rating:'5',comment:'Всё было просто замечательно'}});
-  assert.equal(review.res.status,303);
-  const second=await request(`/reviews/${globalThis.newBookingId}`,{cookie:student,form:{csrf:csrfOf(detail.body),rating:'4',comment:'Повторный отзыв'}});
-  assert.equal(second.res.status,303);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reviews WHERE booking_id=?').get(globalThis.newBookingId).n,1);
+test('обычный пользователь не может менять статусы', async () => {
+  assert.equal((await send('/admin', { cookie: userCookie })).status, 403);
+  assert.equal((await send('/admin/payment', { method: 'POST', cookie: userCookie, body: { id: firstId, status: 'Оплачено' } })).status, 403);
 });
 
-test('Пароли и данные экранируются, даты валидируются',async()=>{
-  assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2026-12-31'),true);
-  const userCookie=await login('student','Student123!');
-  const detail=await request('/booking/99999',{cookie:userCookie});assert.equal(detail.res.status,404);
-  assert.equal(overlapping(db,{room_id:2,date:globalThis.bookingDate,start_time:'11:00',end_time:'13:00'}),true);
+test('администратор подтверждает только одну заявку на зал и дату', async () => {
+  const login = await send('/login', { method: 'POST', body: { login: 'Conf2027', password: 'Demo77' } });
+  assert.equal(login.status, 302);
+  adminCookie = login.cookie;
+  assert.equal(login.location, '/admin');
+  assert.equal((await send('/admin', { method: 'POST', cookie: adminCookie,
+    body: { id: firstId, status: 'Мероприятие назначено' } })).status, 302);
+  assert.equal((await send('/admin', { method: 'POST', cookie: adminCookie,
+    body: { id: secondId, status: 'Мероприятие назначено' } })).status, 302);
+  assert.equal(db.prepare('SELECT status FROM requests WHERE id = ?').get(firstId).status, 'Мероприятие назначено');
+  assert.equal(db.prepare('SELECT status FROM requests WHERE id = ?').get(secondId).status, 'Новая');
+});
+
+test('администратор отмечает оплату', async () => {
+  assert.equal((await send('/admin/payment', { method: 'POST', cookie: adminCookie,
+    body: { id: firstId, status: 'Оплачено' } })).status, 302);
+  const detail = await send('/request/' + firstId, { cookie: userCookie });
+  assert.equal(detail.status, 200);
+  assert.match(detail.html, /Оплачено/);
+});
+
+test('отзыв разрешён после завершения и только один раз', async () => {
+  assert.equal((await send('/review/' + firstId, { method: 'POST', cookie: userCookie,
+    body: { review: 'Все понравилось' } })).status, 400);
+  await send('/admin', { method: 'POST', cookie: adminCookie,
+    body: { id: firstId, status: 'Завершено' } });
+  assert.equal((await send('/review/' + firstId, { method: 'POST', cookie: userCookie,
+    body: { review: 'Всё понравилось' } })).status, 302);
+  assert.equal((await send('/review/' + firstId, { method: 'POST', cookie: userCookie,
+    body: { review: 'Повторный отзыв' } })).status, 400);
+  assert.match((await send('/request/' + firstId, { cookie: userCookie })).html, /Всё понравилось/);
+});
+
+test('запрещён просмотр чужой заявки', async () => {
+  const other = await send('/login', { method: 'POST', body: { login: 'student', password: 'Student123!' } });
+  assert.equal((await send('/request/' + firstId, { cookie: other.cookie })).status, 403);
 });

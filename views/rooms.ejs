@@ -1,0 +1,25 @@
+<%- include('header', { title: 'Список помещений' }) %>
+<h1 class="h2 mb-3">Помещения</h1>
+<p class="text-secondary">Выберите зал для мероприятия. Всего в каталоге: <%= rooms.length %>.</p>
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <a href="/rooms" class="btn btn-sm <%= selected === '' ? 'btn-primary' : 'btn-outline-primary' %>">Все</a>
+  <% types.forEach(type => { %>
+    <a class="btn btn-sm <%= selected === type ? 'btn-primary' : 'btn-outline-primary' %>" href="/rooms/type/<%= encodeURIComponent(type) %>"><%= type %></a>
+  <% }) %>
+</div>
+<div class="row">
+  <% rooms.forEach(room => { %>
+    <div class="col-md-6 col-12 mb-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h2 class="h5"><%= room.name %></h2>
+          <p class="mb-2"><span class="badge text-bg-secondary"><%= room.type %></span></p>
+          <p class="text-secondary mb-0">Вместимость: <%= room.capacity %> чел.</p>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+</div>
+<% if (!rooms.length) { %><p class="alert alert-info">Помещения не найдены.</p><% } %>
+<a class="btn btn-success mt-2" href="<%= user ? '/create' : '/login' %>">Создать заявку</a>
+<%- include('footer') %>

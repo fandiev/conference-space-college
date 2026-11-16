@@ -1,14 +1,20 @@
 {
-  "name": "conference-space",
+  "name": "conference-space-college",
   "version": "1.0.0",
   "private": true,
-  "description": "Учебная система бронирования конференц-залов и переговорных",
-  "type": "commonjs",
-  "engines": { "node": ">=22.13.0" },
+  "type": "module",
+  "description": "Учебный проект бронирования конференц-залов на Express и SQLite",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "node server.js",
+    "dev": "node --watch server.js",
     "test": "node --test tests/*.test.js"
   },
-  "license": "MIT"
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0"
+  }
 }

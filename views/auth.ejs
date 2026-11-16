@@ -1,0 +1,42 @@
+<%- include('header', { title: 'Вход и регистрация' }) %>
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-6 col-12">
+    <div class="card">
+      <div class="card-body">
+        <h1 class="h3 mb-3">Личный кабинет</h1>
+        <ul class="nav nav-tabs mb-3" id="authTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link <%= mode === 'register' ? 'active' : '' %>" type="button" data-bs-toggle="tab" data-bs-target="#registration" aria-controls="registration" aria-selected="<%= mode === 'register' %>">Регистрация</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link <%= mode === 'login' ? 'active' : '' %>" type="button" data-bs-toggle="tab" data-bs-target="#sign-in" aria-controls="sign-in" aria-selected="<%= mode === 'login' %>">Вход</button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade <%= mode === 'register' ? 'show active' : '' %>" id="registration">
+            <% if (errors.length) { %>
+              <div class="alert alert-danger" role="alert"><ul class="mb-0"><% errors.forEach(item => { %><li><%= item %></li><% }) %></ul></div>
+            <% } %>
+            <form method="POST" action="/register">
+              <div class="mb-3"><label for="reg-login" class="form-label">Логин</label><input class="form-control" id="reg-login" name="login" value="<%= form.login || '' %>" required minlength="6" maxlength="30" pattern="[A-Za-z0-9]{6,30}"></div>
+              <div class="mb-3"><label for="reg-password" class="form-label">Пароль</label><input class="form-control" id="reg-password" type="password" name="password" required minlength="8"></div>
+              <div class="mb-3"><label for="reg-fio" class="form-label">ФИО</label><input class="form-control" id="reg-fio" name="fio" value="<%= form.fio || '' %>" required placeholder="Иванов Иван"></div>
+              <div class="mb-3"><label for="reg-phone" class="form-label">Телефон</label><input class="form-control" id="reg-phone" name="phone" value="<%= form.phone || '' %>" required placeholder="8(999)123-45-67"></div>
+              <div class="mb-3"><label for="reg-email" class="form-label">Email</label><input class="form-control" id="reg-email" name="email" type="email" value="<%= form.email || '' %>" required></div>
+              <button class="btn btn-primary w-100" type="submit">Зарегистрироваться</button>
+            </form>
+          </div>
+          <div class="tab-pane fade <%= mode === 'login' ? 'show active' : '' %>" id="sign-in">
+            <% if (error) { %><div class="alert alert-danger" role="alert"><%= error %></div><% } %>
+            <form method="POST" action="/login">
+              <div class="mb-3"><label for="login" class="form-label">Логин</label><input class="form-control" id="login" name="login" value="<%= form.login || '' %>" required></div>
+              <div class="mb-3"><label for="password" class="form-label">Пароль</label><input class="form-control" id="password" name="password" type="password" required></div>
+              <button class="btn btn-primary w-100" type="submit">Войти</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('footer') %>

@@ -1,0 +1,20 @@
+/* Небольшие изменения поверх локального Bootstrap */
+body { min-height: 100vh; display: flex; flex-direction: column; background: #fafbfc; }
+main { flex: 1; }
+.nav-links a, .nav-links .btn-link { color: #245c88; text-decoration: none; font-size: 0.95rem; }
+.nav-links a:hover, .nav-links .btn-link:hover { color: #153f68; text-decoration: underline; }
+.card { border-color: #dce2e8; box-shadow: 0 1px 3px #182c4010; animation: appear 0.3s ease-out; }
+.btn, .form-control, .form-select, .card, .nav-links a { transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 2px 5px #233b4c22; }
+.form-control:focus, .form-select:focus { border-color: #79aee0; }
+.fade-message { animation: appear 0.35s ease-out; }
+.review { white-space: pre-wrap; overflow-wrap: anywhere; }
+@keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 576px) {
+  .navbar-brand { font-size: 1.05rem; }
+  .nav-links { gap: 10px !important; }
+  .btn { min-height: 44px; }
+  h1 { font-size: 1.55rem; }
+  .card { margin-bottom: 0.25rem; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

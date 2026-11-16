@@ -1,0 +1,12 @@
+digraph Conference {
+  graph [rankdir=LR, bgcolor=white, labelloc=t, label="Схема базы данных «Конференции.РФ»", fontsize=17, fontname="DejaVu Sans", nodesep=0.55, ranksep=1.05];
+  node [shape=record, color="#56728f", fontcolor="#182d42", fontname="DejaVu Sans", fontsize=11];
+  edge [color="#4f7190", arrowsize=0.7, fontname="DejaVu Sans", fontsize=10];
+  users [label="{users|id: INTEGER PK\llogin: TEXT UNIQUE\lpassword: TEXT\lfio, phone, email: TEXT\lrole: TEXT\l}"];
+  rooms [label="{rooms|id: INTEGER PK\lname: TEXT\ltype: TEXT\lcapacity: INTEGER\l}"];
+  requests [label="{requests|id: INTEGER PK\luser_id: INTEGER FK\lroom_id: INTEGER FK\ldate_start: TEXT\lpayment: TEXT\lstatus: TEXT\lreview: TEXT\lcreated_at: TEXT\l}"];
+  payments [label="{payments|id: INTEGER PK\lrequest_id: INTEGER UNIQUE FK\lstatus: TEXT\lupdated_at: TEXT\l}"];
+  users -> requests [label="1 : N"];
+  rooms -> requests [label="1 : N"];
+  requests -> payments [label="1 : 0..1"];
+}

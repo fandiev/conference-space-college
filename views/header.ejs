@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title === 'undefined' ? 'Конференции.РФ — учебный проект' : title %></title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-md bg-light border-bottom">
+    <div class="container d-flex flex-wrap gap-2">
+      <a class="navbar-brand fw-semibold" href="/rooms">Конференции.РФ</a>
+      <div class="d-flex align-items-center flex-wrap gap-3 nav-links">
+        <a href="/rooms">Помещения</a>
+        <% if (user) { %>
+          <a href="/dashboard">Мои заявки</a>
+          <% if (user.role === 'admin') { %><a href="/admin">Администратор</a><% } %>
+          <form method="POST" action="/logout" class="m-0"><button type="submit" class="btn btn-link p-0">Выход</button></form>
+        <% } else { %>
+          <a href="/login">Вход</a>
+          <a href="/register">Регистрация</a>
+        <% } %>
+      </div>
+    </div>
+  </nav>
+  <main class="container py-4">
+    <% if (flash) { %><div class="alert alert-info fade-message" role="status"><%= flash %></div><% } %>
